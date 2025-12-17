@@ -1,15 +1,14 @@
 seed: 42
 
-data_path: /data/train
+data_path: data/train
 dataset: movie
 
 USER_ID_FIELD: user
 ITEM_ID_FIELD: item
-LABEL_FIELD: label
 field_separator: "\t"
 
 load_col:
-  inter: [user, item, label]
+  inter: [user, item]
 
 model: EASE
 reg_weight: 250.0
