@@ -1,0 +1,26 @@
+seed: 42
+
+# Dataset
+data_path: data/train
+dataset: movie
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: item_id
+field_separator: "\t"
+
+load_col:
+  inter: [user_id, item_id, timestamp]
+
+# Model
+model: EASE
+reg_weight: 250.0
+
+# Evaluation
+eval_args:
+  split:
+    RS: [0.8, 0.1, 0.1]
+  order: TO
+  mode: full
+
+metrics: ['Recall', 'NDCG']
+topk: 10
+valid_metric: Recall@10
