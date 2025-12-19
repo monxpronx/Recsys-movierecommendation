@@ -3,12 +3,13 @@ seed: 42
 data_path: data/train
 dataset: movie
 
-USER_ID_FIELD: user
-ITEM_ID_FIELD: item
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: item_id
 field_separator: "\t"
 
 load_col:
-  inter: [user, item]
+  inter: [user_id, item_id, timestamp]
+  item: [item_id, genre]
 
 # 필수 파라미터
 model: WideDeep
