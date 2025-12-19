@@ -20,7 +20,7 @@ embedding_size: 64
 reg_weight_1: 0.0
 reg_weight_2: 0.01
 
-epochs: 50
+# epochs:
 show_progress: False
 
 eval_args:
