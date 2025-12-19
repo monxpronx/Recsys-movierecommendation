@@ -33,10 +33,11 @@ initializer_range: 0.02
 
 train_stage: finetune
 
-pre_model_path: saved/PUT_PRETRAIN_MODEL_FILENAME_HERE.pth
+pre_model_path: saved/S3Rec-movie-10.pth
 
 loss_type: CE
 train_neg_sample_args: ~
+item_attribute: genre
 
 epochs: 200
 eval_step: 1
