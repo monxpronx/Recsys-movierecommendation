@@ -1,11 +1,13 @@
 import argparse
 import os
 import pandas as pd
+import torch
 
 from recbole.quick_start import load_data_and_model
 from recbole.utils.case_study import full_sort_topk
 
 TOPK = 10
+BATCH_SIZE = 1024  # GPU 메모리에 맞게 조정
 OUTPUT_DIR = "output"
 
 
@@ -32,13 +34,28 @@ def main():
 
     model.eval()
 
-    topk_score, topk_iid = full_sort_topk(
-        test_uids,
-        model,
-        test_data,
-        k=TOPK,
-        device=config["device"],
-    )
+    all_topk_score, all_topk_iid = [], []
+
+    for i in range(0, len(test_uids), BATCH_SIZE):
+        batch_uids = test_uids[i : i + BATCH_SIZE]
+
+        batch_score, batch_iid = full_sort_topk(
+            batch_uids,
+            model,
+            test_data,
+            k=TOPK,
+            device=config["device"],
+        )
+
+        all_topk_score.append(batch_score)
+        all_topk_iid.append(batch_iid)
+
+        # 메모리 여유 확보
+        torch.cuda.empty_cache()
+
+    # 최종 합치기
+    topk_score = torch.cat(all_topk_score, dim=0)
+    topk_iid = torch.cat(all_topk_iid, dim=0)
 
     user_tokens = dataset.id2token(uid_field, test_uids)
 
