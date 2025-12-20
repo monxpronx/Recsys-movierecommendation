@@ -3,3 +3,5 @@ data/
 output
 saved
 __pycache__/
+log
+log_tensorboard
