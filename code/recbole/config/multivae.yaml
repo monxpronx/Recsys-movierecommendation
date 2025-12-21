@@ -13,7 +13,7 @@ load_col:
 
 # 모델명 & 파라미터
 model: MultiVAE
-latent_dimension: 128 # 64/128/256 비교
+latent_dimension:128 # 64/128/256 비교
 mlp_hidden_size: [600]
 dropout_prob: 0.5
 anneal_cap: 0.2
