@@ -1,0 +1,47 @@
+seed: 42
+
+data_path: data/train
+dataset: movie
+
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: item_id
+TIME_FIELD: timestamp
+field_separator: "\t"
+
+load_col:
+  inter: [user_id, item_id,timestamp]
+
+LIST_SUFFIX: _list
+ITEM_LIST_LENGTH_FIELD: item_length
+MAX_ITEM_LIST_LENGTH: 50
+
+model: SASRec
+
+hidden_size: 64
+inner_size: 256
+n_layers: 2
+n_heads: 2
+
+hidden_dropout_prob: 0.5
+attn_dropout_prob: 0.5
+
+hidden_act: gelu
+layer_norm_eps: 1e-12
+initializer_range: 0.02
+
+loss_type: CE
+train_neg_sample_args: ~
+eval_args:
+  group_by: user
+  order: TO
+  split:
+    LS: valid_and_test
+  mode: full
+
+epochs: 200
+eval_step: 1
+stopping_step: 10
+
+metrics: ['Recall', 'NDCG']
+topk: 10
+valid_metric: Recall@10
