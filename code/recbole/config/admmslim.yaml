@@ -10,8 +10,18 @@ field_separator: "\t"
 load_col:
   inter: [user_id, item_id,timestamp]
 
-model: EASE
-reg_weight: 250.0
+# ADMM-based SLIM (default hyperparameters)
+model: ADMMSLIM
+
+# ===== ADMMSLIM defaults =====
+lambda1: 3.0
+lambda2: 200.0
+alpha: 0.5
+rho: 5000.0
+k: 50
+positive_only: False
+center_columns: True
+# ==============================
 
 eval_args:
   group_by: user
