@@ -8,10 +8,19 @@ ITEM_ID_FIELD: item_id
 field_separator: "\t"
 
 load_col:
-  inter: [user_id, item_id,timestamp]
+  inter: [user_id, item_id, timestamp, rating]
 
-model: EASE
-reg_weight: 250.0
+model: BPR
+
+# ===== BPR 기본 설정 =====
+embedding_size: 64
+# =========================
+
+# ===== Early Stopping 명시 설정 =====
+epochs: 300
+eval_step: 1
+stopping_step: 10
+# ===================================
 
 eval_args:
   group_by: user

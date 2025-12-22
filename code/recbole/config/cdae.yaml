@@ -1,0 +1,35 @@
+seed: 42
+
+data_path: data/train
+dataset: movie
+
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: item_id
+field_separator: "\t"
+
+load_col:
+  inter: [user_id, item_id, timestamp]
+
+# 모델명 & 파라미터
+model: CDAE
+loss_type: BCE
+hid_activation: relu
+out_activation: sigmoid
+corruption_ratio: 0.5
+embedding_size: 64
+reg_weight_1: 0.0
+reg_weight_2: 0.01
+
+# epochs:
+show_progress: False
+
+eval_args:
+  group_by: user
+  order: RO
+  split:
+    LS: valid_and_test
+  mode: full
+
+metrics: ['Recall', 'NDCG']
+topk: 10
+valid_metric: Recall@10
