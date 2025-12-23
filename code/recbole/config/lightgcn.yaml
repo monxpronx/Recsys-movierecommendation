@@ -1,0 +1,50 @@
+# 1. 환경 설정
+gpu_id: '0'
+worker: 4
+seed: 42
+state: INFO
+reproducibility: True
+
+# 2. 데이터 설정
+data_path: data/train
+dataset: movie             # 본인 데이터셋 이름
+field_separator: "\t"
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: item_id
+RATING_FIELD: timestamp          # (있으면 사용, 없으면 생략 가능)
+
+# 중요: LightGCN은 시퀀스 길이가 필요 없지만, General 모델용 설정이 필요
+load_col:
+    inter: [user_id, item_id, timestamp] 
+    # timestamp는 모델 학습엔 안 쓰이지만, 데이터 Split을 시간순으로 하려면 로드해야 함
+
+# 3. 모델 설정 (LightGCN 핵심)
+model: LightGCN
+embedding_size: 64              # 임베딩 차원 (보통 64)
+n_layers: 3                     # GCN 전파 레이어 수 (논문 기본값: 3)
+reg_weight: 1e-04               # 정규화 가중치 (과적합 방지, 매우 중요!)
+
+# 4. 학습 설정
+epochs: 1000
+train_batch_size: 16384          # 그래프 모델은 배치를 키워도 됩니다
+learner: adam
+learning_rate: 0.001
+eval_step: 10
+stopping_step: 20
+weight_decay: 0.0
+clip_grad_norm: {'max_norm': 5, 'norm_type': 2}
+
+# 5. 평가 설정 (SASRec과 다름!)
+eval_args:
+  # RS: Random Split (일반적인 방식: 8:1:1)
+  # 만약 대회라서 시간순으로 잘라야 한다면 'LS'(Leave-one-out) 사용
+  split: 
+    RS: [0.8, 0.1, 0.1]
+  group_by: user
+  order: RO                   # Random Order (데이터 섞기)
+  mode: full                  # 전체 아이템 대상 평가
+
+metrics: ['Recall', 'NDCG']
+topk: [5, 10]
+valid_metric: Recall@10
+eval_batch_size: 409600
