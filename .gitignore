@@ -5,3 +5,10 @@ saved
 __pycache__/
 log
 log_tensorboard
+
+# ensemble results
+ensemble/*.csv
+ensemble/ensemble_outputs/
+
+# logs
+*.log
