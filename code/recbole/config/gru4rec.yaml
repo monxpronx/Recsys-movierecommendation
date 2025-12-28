@@ -13,7 +13,7 @@ field_separator: "\t"
 
 load_col:
   inter: [user_id, item_id, timestamp]
-  item: [item_id, genre]
+  item: [item_id, genre, year, director]
 
 LIST_SUFFIX: _list
 ITEM_LIST_LENGTH_FIELD: item_length
@@ -26,7 +26,7 @@ hidden_size: 128
 num_layers: 1
 dropout_prob: 0.3
 
-selected_features: ['genre']
+selected_features: ['genre', 'year', 'director']
 pooling_mode: sum
 
 loss_type: CE
