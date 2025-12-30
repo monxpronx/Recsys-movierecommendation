@@ -7,6 +7,7 @@ from tqdm import tqdm
 from recbole.quick_start import load_data_and_model
 from recbole.data.interaction import Interaction
 from catboost import CatBoostRanker, Pool
+from utils import SequenceGenerator
 
 # ==========================================
 # 1. 모델 로드 함수 (User 코드 반영)
@@ -24,13 +25,24 @@ def load_recbole_model(saved_file):
 # ==========================================
 # 2. 점수 추출 함수 (배치 처리로 속도 최적화)
 # ==========================================
+seq_gen = SequenceGenerator('user_history.pkl')  # 유저별 시청 이력 로드
+
 def get_model_scores(model, dataset, user_list, item_list, batch_size=2048):
     """
     리스트로 된 유저, 아이템에 대해 모델의 예측 점수를 반환합니다.
+    * max_seq_len은 50으로 고정
     """
     device = model.device
     total_scores = []
     
+    # 모델이 sequential인지 확인
+    is_sequential = hasattr(model, 'ITEM_SEQ')
+
+    temp_config = {
+        'device': device,
+        'MAX_ITEM_LIST_LENGTH': 50
+    }
+
     # 배치 단위로 처리 (한 번에 다 넣으면 메모리 터질 수 있음)
     for i in tqdm(range(0, len(user_list), batch_size), desc=f"Scoring {model.__class__.__name__}"):
         batch_users = user_list[i : i+batch_size]
@@ -41,10 +53,20 @@ def get_model_scores(model, dataset, user_list, item_list, batch_size=2048):
         item_tensor = torch.tensor(batch_items).to(device)
         
         # Interaction 객체 생성
-        interaction = Interaction({
+        interaction = {
             'user_id': user_tensor,
             'item_id': item_tensor
-        })
+        }
+
+        # 시퀀셜 모델인 경우 시청 이력 추가
+        if is_sequential:
+            item_seq, item_len = seq_gen.get_input_for_model(dataset, batch_users, temp_config)
+
+            interaction[model.ITEM_SEQ] = item_seq
+            interaction[model.ITEM_SEQ_LEN] = item_len
+
+        # Interaction 객체 생성
+        interaction = Interaction(interaction)
         
         # 점수 예측
         with torch.no_grad():
@@ -56,11 +78,11 @@ def get_model_scores(model, dataset, user_list, item_list, batch_size=2048):
 # ==========================================
 # 3. 학습 데이터 생성 (Negative Sampling)
 # ==========================================
-def generate_training_data(train_csv_path, dataset, num_neg=2):
+def generate_training_data(train_csv_path, dataset, num_neg=2, max_pos=150):
     """
     실제 시청 기록(Pos)과 안 본 영화(Neg)를 섞어서 학습 데이터를 만듭니다.
     """
-    print("Generating Training Data (Pos + Neg)...")
+    print("Generating Training Data (Pos + Neg, Max Pos={max_pos})...")
     
     # 1. 원본 학습 데이터 로드 (User ID, Item ID가 문자열일 수 있음)
     origin_df = pd.read_csv(train_csv_path)
@@ -75,13 +97,15 @@ def generate_training_data(train_csv_path, dataset, num_neg=2):
     user_seen = origin_df.groupby('user_id_idx')['item_id_idx'].apply(set).to_dict()
     
     users, items, targets = [], [], []
-    all_items = set(range(1, dataset.item_num)) # 0번은 보통 padding
     
     # 3. 데이터 생성 루프
     unique_users = origin_df['user_id_idx'].unique()
     
     for u in tqdm(unique_users, desc="Sampling Negatives"):
-        seen_items = user_seen.get(u, set())
+        seen_items = list(user_seen.get(u, set()))
+        
+        if len(seen_items) > max_pos:
+            seen_items = seen_items[-max_pos:]  # 최근 max_pos개만 사용
         
         # (1) Positive Data (본 거) -> Target 1
         for i in seen_items:
@@ -118,7 +142,7 @@ def main():
     EASE_PATH = 'saved/EASE-best.pth' # RecBole로 학습한 EASE라고 가정
 
     TRAIN_CSV = '../../data/train/train_ratings.csv'       # 원본 학습 데이터 (정답지)
-    TOP100_CSV = 'top100_candidates.csv'  # 추론할 후보군 (Top-100)
+    TOP100_CSV = 'top100.csv'  # 추론할 후보군 (Top-100)
     OUTPUT_CSV = '../../data/eval/final_submission.csv'   # 최종 결과 파일
     
     # 중간 저장 파일명 정의
@@ -177,7 +201,7 @@ def main():
         learning_rate=0.05,
         depth=6,
         loss_function='YetiRank',
-        eval_metric='RecallAtK:10',
+        eval_metric='RecallAt:top=10',
         task_type="GPU", # GPU 있으면 "GPU"로 변경
         verbose=100,
         early_stopping_rounds=50,
@@ -196,6 +220,19 @@ def main():
     else:
         print("🚀 후보군 데이터에 대한 점수 계산을 시작합니다...")
     
+        # dataset 변수가 없으면 모델을 로드
+        # (위에서 학습 데이터 로드할 때 모델 로딩을 건너뛰었을 경우를 대비함)
+        if 'dataset' not in locals():
+            print("⚠️ 모델과 데이터셋이 메모리에 없어서 다시 로드합니다...")
+            sas_model, dataset, sas_config = load_recbole_model(SASREC_PATH) # config도 같이 받기
+            lgcn_model, _, _ = load_recbole_model(LIGHTGCN_PATH)
+            ease_model, _, _ = load_recbole_model(EASE_PATH)
+            
+        # user_history 다시 로드
+        if 'seq_gen' not in locals():
+            print("Loading SequenceGenerator from pkl...")
+            global seq_gen
+            seq_gen = SequenceGenerator('user_history.pkl')
     
         candidates = pd.read_csv(TOP100_CSV) 
         # candidates에는 user, item (원본 ID)이 있다고 가정
@@ -203,7 +240,7 @@ def main():
         # ID 변환 (문자열 -> 숫자)
         candidates['user_idx'] = candidates['user'].map(lambda x: dataset.token2id(dataset.uid_field, str(x)))
         candidates['item_idx'] = candidates['item'].map(lambda x: dataset.token2id(dataset.iid_field, str(x)))
-    
+
         # 점수 계산 (만약 CSV에 점수가 없다면 계산, 있으면 생략 가능)
         c_users = candidates['user_idx'].values
         c_items = candidates['item_idx'].values
@@ -211,17 +248,20 @@ def main():
         candidates['sasrec_score'] = get_model_scores(sas_model, dataset, c_users, c_items)
         candidates['lightgcn_score'] = get_model_scores(lgcn_model, dataset, c_users, c_items)
         candidates['ease_score'] = get_model_scores(ease_model, dataset, c_users, c_items)
-    
+
+        candidates.drop(columns=['user_idx', 'item_idx'], inplace=True, errors='ignore')  # 정수 ID 컬럼 제거
+
         candidates.to_csv(CANDIDATES_WITH_SCORES_PATH, index=False)
         print("후보군 점수 계산 완료!")
         print(candidates.head())
 
     # CatBoost 예측을 위해 정렬
-    candidates.sort_values(by='user_idx', inplace=True)
+    print("Predicting with CatBoost...")
+    candidates.sort_values(by='user', inplace=True)
     
     test_pool = Pool(
         data=candidates[['sasrec_score', 'lightgcn_score', 'ease_score']],
-        group_id=candidates['user_idx']
+        group_id=candidates['user']
     )
     
     # 최종 점수 예측
