@@ -1,0 +1,3 @@
+# inference.py #
+python inference.py --checkpoint saved/CDAE-best.pth --topk 100
+
