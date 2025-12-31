@@ -10,7 +10,43 @@ from catboost import CatBoostRanker, Pool
 from utils import SequenceGenerator
 
 # ==========================================
-# 1. 모델 로드 함수 (User 코드 반영)
+# 1. 메타데이터 로드 함수
+# ==========================================
+
+def load_and_map_metadata(meta_path, dataset):
+    """
+    item_meta.csv를 읽어서 RecBole 내부 ID로 변환 후 반환
+    """
+    print(f"Loading Metadata from {meta_path}...")
+    meta_df = pd.read_csv(meta_path)
+    
+    # 예: meta_df 컬럼이 ['item', 'director', 'writer', 'release_age', 'genre'] 라고 가정
+    
+    # 1. ID 매핑 (문자열 Item ID -> RecBole 내부 숫자 ID)
+    # dataset에 없는 아이템이 메타파일에 있을 수 있으니 try-except 처리 혹은 map 사용
+    # (여기서는 안전하게 map 사용하되, 없는 건 NaN 처리 후 제거)
+    meta_df['item_idx'] = meta_df['item'].map(
+        lambda x: dataset.token2id(dataset.iid_field, str(x)) 
+        if str(x) in dataset.field2token_id[dataset.iid_field] else np.nan
+    )
+    
+    # 매핑 안 된(학습 데이터에 없는) 아이템 제거 & 정수형 변환
+    meta_df.dropna(subset=['item_idx'], inplace=True)
+    meta_df['item_idx'] = meta_df['item_idx'].astype(int)
+    
+    # 2. 필요한 컬럼만 남기기 (item은 이제 필요 없고 item_idx만 있으면 됨)
+    # CatBoost는 범주형 변수를 문자열로 받는 게 좋음 (결측치는 'Unknown'으로 채움)
+    cols_to_use = ['item_idx', 'director', 'writer', 'release_age', 'genre'] # 실제 컬럼명에 맞게 수정
+    meta_df = meta_df[cols_to_use].fillna('Unknown')
+    
+    # 모든 범주형 컬럼을 문자열(String)로 변환 (CatBoost 필수 요구사항)
+    for col in ['director', 'writer', 'release_age', 'genre']:
+        meta_df[col] = meta_df[col].astype(str)
+        
+    return meta_df
+
+# ==========================================
+# 2. 모델 로드 함수 (User 코드 반영)
 # ==========================================
 def load_recbole_model(saved_file):
     """
@@ -23,7 +59,7 @@ def load_recbole_model(saved_file):
     return model, dataset, config
 
 # ==========================================
-# 2. 점수 추출 함수 (배치 처리로 속도 최적화)
+# 3. 점수 추출 함수 (배치 처리로 속도 최적화)
 # ==========================================
 seq_gen = SequenceGenerator('user_history.pkl')  # 유저별 시청 이력 로드
 
@@ -76,7 +112,7 @@ def get_model_scores(model, dataset, user_list, item_list, batch_size=2048):
     return np.array(total_scores)
 
 # ==========================================
-# 3. 학습 데이터 생성 (Negative Sampling)
+# 4. 학습 데이터 생성 (Negative Sampling)
 # ==========================================
 def generate_training_data(train_csv_path, dataset, num_neg=2, max_pos=150):
     """
@@ -131,7 +167,7 @@ def generate_training_data(train_csv_path, dataset, num_neg=2, max_pos=150):
     return pd.DataFrame({'user': users, 'item': items, 'target': targets})
 
 # ==========================================
-# 메인 실행 코드
+# 5. 메인 실행 코드
 # ==========================================
 def main():
     # -----------------------------------------------------------
@@ -142,6 +178,7 @@ def main():
     EASE_PATH = 'saved/EASE-best.pth' # RecBole로 학습한 EASE라고 가정
 
     TRAIN_CSV = '../../data/train/train_ratings.csv'       # 원본 학습 데이터 (정답지)
+    META_CSV = '../../data/train/item_metadata.csv'          # 아이템 메타데이터
     TOP100_CSV = 'top100.csv'  # 추론할 후보군 (Top-100)
     OUTPUT_CSV = '../../data/eval/final_submission.csv'   # 최종 결과 파일
     
@@ -150,26 +187,39 @@ def main():
     CANDIDATES_WITH_SCORES_PATH = 'candidates_with_scores.csv'
 
     # -----------------------------------------------------------
-    # 1. 모델 및 데이터셋 로드
+    # 5-1. 모델 및 데이터셋 로드
     # -----------------------------------------------------------
     # 데이터셋 정보(ID 매핑)는 하나만 있어도 되므로 SASRec거를 메인으로 씁니다.
+    print("🚀 모델과 데이터셋을 로드합니다...")
+    sas_model, dataset, _ = load_recbole_model(SASREC_PATH)
+    lgcn_model, _, _ = load_recbole_model(LIGHTGCN_PATH)
+    ease_model, _, _ = load_recbole_model(EASE_PATH)
+    
+    seq_gen = SequenceGenerator('user_history.pkl')
+
+    meta_df = load_and_map_metadata(META_CSV, dataset) 
+
     if os.path.exists(TRAIN_WITH_SCORES_PATH):
         print(f"✅ 이미 계산된 학습 데이터가 있습니다! 로드 중... ({TRAIN_WITH_SCORES_PATH})")
         train_df = pd.read_csv(TRAIN_WITH_SCORES_PATH)
     else:
         print("🚀 학습 데이터 및 점수 계산을 시작합니다...")
 
-        sas_model, dataset, _ = load_recbole_model(SASREC_PATH)
-        lgcn_model, _, _ = load_recbole_model(LIGHTGCN_PATH)
-        ease_model, _, _ = load_recbole_model(EASE_PATH)
-    
     # -----------------------------------------------------------
-    # 2. CatBoost 학습용 데이터 생성 (Target 0, 1)
+    # 5-2. CatBoost 학습용 데이터 생성 (Target 0, 1)
     # -----------------------------------------------------------
-        train_df = generate_training_data(TRAIN_CSV, dataset, num_neg=2)
-    
+        train_df = generate_training_data(TRAIN_CSV, dataset, num_neg=2, max_pos=150)
+
+        # train_df에 메타데이터 병합
+        print("Merging Metadata into Training Data...")
+        train_df = pd.merge(train_df, meta_df, left_on='item', right_on='item_idx', how='left')
+
+        # 메타 데이터가 없는 아이템(cold start)은 'Unknown'으로 채우기
+        cat_cols = ['director', 'writer', 'release_age', 'genre']
+        train_df[cat_cols] = train_df[cat_cols].fillna('Unknown')
+
     # -----------------------------------------------------------
-    # 3. 학습 데이터에 대한 모델 점수 계산 (Feature Engineering)
+    # 5-3. 학습 데이터에 대한 모델 점수 계산 (Feature Engineering)
     # -----------------------------------------------------------
         user_ids = train_df['user'].values
         item_ids = train_df['item'].values
@@ -178,22 +228,24 @@ def main():
         train_df['lightgcn_score'] = get_model_scores(lgcn_model, dataset, user_ids, item_ids)
         train_df['ease_score'] = get_model_scores(ease_model, dataset, user_ids, item_ids)
     
-    # (선택) 여기에 장르, 감독 등 Side Info가 있다면 merge 하세요!
-    # train_df = pd.merge(train_df, genre_df, left_on='item', right_on='item_idx', how='left')
         train_df.to_csv(TRAIN_WITH_SCORES_PATH, index=False)
         print("CatBoost 학습 데이터 준비 완료!")
         print(train_df.head())
 
     # -----------------------------------------------------------
-    # 4. CatBoostRanker 학습
+    # 5-4. CatBoostRanker 학습
     # -----------------------------------------------------------
     # 랭킹 학습을 위해 유저별로 정렬
     train_df.sort_values(by='user', inplace=True)
     
+    cat_cols = ['director', 'writer', 'release_age', 'genre']
+    feature_cols = ['sasrec_score', 'lightgcn_score', 'ease_score'] + cat_cols
+
     train_pool = Pool(
-        data=train_df[['sasrec_score', 'lightgcn_score', 'ease_score']], # + Side Info
+        data=train_df[feature_cols],
         label=train_df['target'],
-        group_id=train_df['user'] # 같은 유저끼리 그룹핑
+        group_id=train_df['user'], # 같은 유저끼리 그룹핑
+        cat_features=cat_cols
     )
     
     model = CatBoostRanker(
@@ -212,31 +264,20 @@ def main():
     model.fit(train_pool)
     
     # -----------------------------------------------------------
-    # 5. 최종 추론 (Top-100 후보군 사용)
+    # 5-5. 최종 추론 (Top-100 후보군 사용)
     # -----------------------------------------------------------
     if os.path.exists(CANDIDATES_WITH_SCORES_PATH):
         print(f"✅ 이미 계산된 후보군 데이터가 있습니다! 로드 중... ({CANDIDATES_WITH_SCORES_PATH})")
         candidates = pd.read_csv(CANDIDATES_WITH_SCORES_PATH)
+
     else:
         print("🚀 후보군 데이터에 대한 점수 계산을 시작합니다...")
     
-        # dataset 변수가 없으면 모델을 로드
-        # (위에서 학습 데이터 로드할 때 모델 로딩을 건너뛰었을 경우를 대비함)
-        if 'dataset' not in locals():
-            print("⚠️ 모델과 데이터셋이 메모리에 없어서 다시 로드합니다...")
-            sas_model, dataset, sas_config = load_recbole_model(SASREC_PATH) # config도 같이 받기
-            lgcn_model, _, _ = load_recbole_model(LIGHTGCN_PATH)
-            ease_model, _, _ = load_recbole_model(EASE_PATH)
-            
-        # user_history 다시 로드
-        if 'seq_gen' not in locals():
-            print("Loading SequenceGenerator from pkl...")
-            global seq_gen
-            seq_gen = SequenceGenerator('user_history.pkl')
-    
         candidates = pd.read_csv(TOP100_CSV) 
         # candidates에는 user, item (원본 ID)이 있다고 가정
-    
+        candidates = pd.merge(candidates, meta_df, left_on='item', right_on='item_idx', how='left')
+        candidates[cat_cols] = candidates[cat_cols].fillna('Unknown')
+
         # ID 변환 (문자열 -> 숫자)
         candidates['user_idx'] = candidates['user'].map(lambda x: dataset.token2id(dataset.uid_field, str(x)))
         candidates['item_idx'] = candidates['item'].map(lambda x: dataset.token2id(dataset.iid_field, str(x)))
@@ -260,15 +301,16 @@ def main():
     candidates.sort_values(by='user', inplace=True)
     
     test_pool = Pool(
-        data=candidates[['sasrec_score', 'lightgcn_score', 'ease_score']],
-        group_id=candidates['user']
+        data=candidates[feature_cols],
+        group_id=candidates['user'],
+        cat_features=cat_cols
     )
     
     # 최종 점수 예측
     candidates['final_score'] = model.predict(test_pool)
     
     # -----------------------------------------------------------
-    # 6. Top-10 선정 및 저장
+    # 5-6. Top-10 선정 및 저장
     # -----------------------------------------------------------
     print("Selecting Top-10...")
     top10 = candidates.sort_values(['user', 'final_score'], ascending=[True, False]) \

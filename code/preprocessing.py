@@ -62,6 +62,10 @@ def main():
     directors = prune_categoricals(directors, "director", threshold=5)
     writers = prune_categoricals(writers, "writer", threshold=5)
 
+    # 같은 item이면 먼저 등장한 director, writer만 대표로 남김
+    directors = directors.drop_duplicates('item')
+    writers = writers.drop_duplicates('item')
+
     # (3) Genres
     # genres.columns = ["item", "genre"]
     genres = genres.drop_duplicates('item') # 같은 item이면 먼저 등장한 genre 하나만 남김
