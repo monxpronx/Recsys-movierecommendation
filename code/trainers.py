@@ -264,6 +264,7 @@ class FinetuneTrainer(Trainer):
             self.model.eval()
 
             pred_list = None
+            pred_score_list = None
             answer_list = None
             for i, batch in rec_data_iter:
 
@@ -279,26 +280,36 @@ class FinetuneTrainer(Trainer):
                 batch_user_index = user_ids.cpu().numpy()
                 rating_pred[self.args.train_matrix[batch_user_index].toarray() > 0] = 0
 
-                ind = np.argpartition(rating_pred, -10)[:, -10:]
+                # Top-K 추출
+                K = 100
+                ind = np.argpartition(rating_pred, -K)[:, -K:] # 10
 
                 arr_ind = rating_pred[np.arange(len(rating_pred))[:, None], ind]
 
                 arr_ind_argsort = np.argsort(arr_ind)[np.arange(len(rating_pred)), ::-1]
 
+                # 최종 정렬된 아이템 ID 리스트
                 batch_pred_list = ind[
+                    np.arange(len(rating_pred))[:, None], arr_ind_argsort
+                ]
+
+                # 최종 정렬된 점수 리스트
+                batch_pred_score_list = arr_ind[
                     np.arange(len(rating_pred))[:, None], arr_ind_argsort
                 ]
 
                 if i == 0:
                     pred_list = batch_pred_list
+                    pred_score_list = batch_pred_score_list # 점수 저장
                     answer_list = answers.cpu().data.numpy()
                 else:
                     pred_list = np.append(pred_list, batch_pred_list, axis=0)
+                    pred_score_list = np.append(pred_score_list, batch_pred_score_list, axis=0) # 점수 저장
                     answer_list = np.append(
                         answer_list, answers.cpu().data.numpy(), axis=0
                     )
 
             if mode == "submission":
-                return pred_list
+                return pred_list, pred_score_list
             else:
                 return self.get_full_sort_score(epoch, answer_list, pred_list)
