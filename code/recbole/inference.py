@@ -6,7 +6,7 @@ import torch
 from recbole.quick_start import load_data_and_model
 from recbole.utils.case_study import full_sort_topk
 
-DEFAULT_TOPK = 100
+DEFAULT_TOPK = 10
 BATCH_SIZE = 1024  # GPU 메모리에 맞게 조정
 OUTPUT_DIR = "output"
 

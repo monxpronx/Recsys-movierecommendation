@@ -1,0 +1,55 @@
+# 1. 환경 설정
+gpu_id: 0
+use_gpu: True
+worker: 4
+pin_memory: True
+seed: 42
+state: INFO
+reproducibility: True
+data_path: data/train/
+
+# 2. 데이터 설정
+dataset: movie
+load_col:
+    inter: [user, item, timestamp]
+    item: [item]
+
+USER_ID_FIELD: user
+ITEM_ID_FIELD: item
+TIME_FIELD: timestamp
+
+MAX_ITEM_LIST_LENGTH: 50
+
+# 3. 모델 설정 (CORE)
+model: CORE
+
+# 하이퍼파라미터
+embedding_size: 64
+n_layers: 2             # Transformer 레이어 수 (데이터 양에 따라 2~4 조절)
+n_heads: 2              # Attention Head 수
+inner_size: 256         # Feed Forward Network 크기 (보통 emb * 4)
+dropout_probs: [0.3, 0.3, 0.3] # [Emb, Net, Attn] Dropout
+loss_type: CE
+dnn_type: trm           # Encoder 타입 (trm: Transformer, ave: Average, ...)
+
+# 4. 학습 설정
+epochs: 100
+train_batch_size: 2048
+eval_batch_size: 40960
+learner: adam
+learning_rate: 0.001
+early_stopping_step: 10
+train_neg_sample_args: ~
+
+# 5. 평가 설정
+eval_args:
+    split: {'RS': [0.8, 0.1, 0.1]}
+    group_by: user
+    order: TO
+    mode: full
+
+eval_neg_sample_args: ~
+
+metrics: ['Recall', 'NDCG', 'MRR']
+topk: [10]
+valid_metric: Recall@10
