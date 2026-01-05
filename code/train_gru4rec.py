@@ -40,16 +40,16 @@ print("Train sessions:", train_sessions["SessionId"].nunique(), "rows:", len(tra
 
 # ===== 3) 학습 =====
 gru = GRU4Rec(
-    layers=[100],
+    layers=[200],
     loss="cross-entropy",
     batch_size=64,
     n_epochs=10,
-    learning_rate=0.05,
+    learning_rate=0.02,
     momentum=0.0,
-    n_sample=2048,
+    n_sample=1024,
     sample_alpha=0.5,
     dropout_p_embed=0.0,
-    dropout_p_hidden=0.0,
+    dropout_p_hidden=0.2,
     constrained_embedding=True,
     device=torch.device(DEVICE),
 )
