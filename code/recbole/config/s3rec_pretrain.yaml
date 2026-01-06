@@ -1,6 +1,7 @@
 # 1. 기본 설정
 gpu_id: '0'
 worker: 4
+pin_memory: True
 seed: 42
 state: INFO
 reproducibility: true
@@ -10,20 +11,20 @@ data_path: data/train
 dataset: movie
 field_separator: "\t"
 
-USER_ID_FIELD: user_id
-ITEM_ID_FIELD: item_id
+USER_ID_FIELD: user
+ITEM_ID_FIELD: item
 TIME_FIELD: timestamp
 
 load_col:
-  inter: [user_id, item_id, timestamp]
-  item: [item_id, genre]
+  inter: [user, item, timestamp]
+  item: [item, genre, director, writer, year]
 
 # 3. 모델 구조
 model: S3Rec
 train_stage: pretrain
 
 # 학습에 사용할 아이템 속성 지정
-selected_features: ['genre']
+item_attribute_field: genre
 
 # 아키텍처 파라미터
 hidden_size: 64
@@ -51,7 +52,7 @@ sp_weight: 0.5
 epochs: 100
 train_batch_size: 16384 # 8192, 2048
 learner: adam
-learning_rate: 0.001
+learning_rate: 0.003
 save_step: 10
 weight_decay: 0.0
 eval_step: 0
