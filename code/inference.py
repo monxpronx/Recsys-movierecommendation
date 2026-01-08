@@ -110,9 +110,9 @@ def main():
 
     trainer.load(args.checkpoint_path)
     print(f"Load model from {args.checkpoint_path} for submission!")
-    preds = trainer.submission(0)
+    preds, scores = trainer.submission(0)
 
-    generate_submission_file(args.data_file, preds)
+    generate_submission_file(args.data_file, preds, scores)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,64 @@
+# 1. 환경 설정
+gpu_id: 0
+use_gpu: True
+worker: 4
+pin_memory: True
+seed: 42
+state: INFO
+reproducibility: True
+
+# 2. 데이터 설정
+data_path: data/train/
+dataset: movie
+
+# 필드명 매핑
+alias_of_item_id: [item]
+USER_ID_FIELD: user        # train_ratings.csv의 user 컬럼
+ITEM_ID_FIELD: item        # train_ratings.csv의 item 컬럼
+TIME_FIELD: timestamp      # timestamp 컬럼
+
+# 로드할 컬럼 지정
+load_col:
+    # train_ratings.csv 파일 (컬럼명 그대로)
+    inter: [user, item, timestamp] 
+    
+    # 위에서 만든 movie.item 파일 (컬럼명 그대로)
+    # 뒤에 붙은 :token_seq는 RecBole이 알아서 떼고 인식하므로 그냥 item, genre라고 쓰면 됩니다.
+    item: [item, genre, director, writer, year]
+
+# 3. 모델 설정
+model: GRU4RecF
+
+# 사용할 Feature 선택
+selected_features: [genre, director, writer, year]
+
+# 4. 하이퍼파라미터
+embedding_size: 64      # Item ID 및 Feature 임베딩 크기
+hidden_size: 128        # GRU 히든 사이즈 (보통 임베딩의 2배 or 동일하게)
+num_layers: 2           # GRU 레이어 수
+dropout_prob: 0.3       # 과적합 방지 (Feature가 많아지면 조금 높게 잡는 게 좋음)
+loss_type: CE           # Cross Entropy
+
+# Feature 처리 방식 (concatenation 추천)
+# merge_type: concatenate # (기본값) Item Emb + Director Emb + ... 이렇게 붙임
+
+# 5. 학습 및 평가
+epochs: 100
+train_batch_size: 2048  # V100이니까 넉넉하게
+eval_batch_size: 2048
+learner: adam
+learning_rate: 0.001
+early_stopping_step: 10
+train_neg_sample_args: ~
+
+eval_args:
+    split: {'RS': [0.8, 0.1, 0.1]} # Random Split (유저 성향 파악 유리)
+    group_by: user
+    order: TO
+    mode: full
+
+eval_neg_sample_args: ~
+
+metrics: ['Recall', 'NDCG']
+topk: [10]
+valid_metric: Recall@10
