@@ -1,0 +1,64 @@
+# 1. 환경 설정 (Environment Settings)
+gpu_id: '0'
+worker: 8
+pin_memory: True # GPU로 데이터 전송 속도 향상(V100 필수 옵션)
+use_gpu: True
+seed: 42
+state: INFO
+reproducibility: True  # 실험 재현을 위해 고정
+
+# 2. 데이터 설정 (Data Settings)
+# 중요: 데이터셋 파일명은 폴더 이름과 일치해야 합니다 (예: dataset/movie_data/movie_data.inter)
+data_path: data/train
+dataset: movie
+
+# 데이터 컬럼 매핑 (대회 데이터 포맷에 맞춰 수정 필요)
+load_col:
+    inter: [user, item, timestamp]  # Side-info가 있다면 로드는 하되, 기본 BERT4Rec은 ID만 사용함
+
+# 전처리 설정
+MAX_ITEM_LIST_LENGTH: 100  # 한 유저의 최대 시퀀스 길이 (영화 시청 평균 개수 고려)
+USER_ID_FIELD: user
+ITEM_ID_FIELD: item
+TIME_FIELD: timestamp
+field_separator: "\t"
+
+# 데이터 분할 전략 (Data Splitting)
+# 설명: Test set이 시퀀스의 '마지막'이 아니라 '랜덤'하다면 Random Split(RS)이 논리적으로 맞습니다.
+eval_args:
+    split: {'RS': [0.8, 0.1, 0.1]} # Train 80%, Valid 10%, Test 10% (랜덤 분할)
+    group_by: user
+    order: TO              # Random Order (시간 순서 무시, 랜덤성 강조 시)
+    mode: full             # 전체 아이템 중 랭킹 (Full Ranking)
+
+# 3. 모델 설정 (Model Settings)
+model: BERT4Rec
+
+# BERT 핵심 하이퍼파라미터
+embedding_size: 256    # 아이템 임베딩 크기 (64 or 128 추천)
+n_layers: 2 #2         # Transformer 레이어 수 (데이터가 적으면 2, 많으면 4~)
+n_heads: 4 #2          # Multi-head attention 헤드 수
+hidden_dropout_prob: 0.3 #0.2
+attn_dropout_prob: 0.3 #0.2
+max_split_size_mb: 128
+
+# 마스킹 비율 (매우 중요)
+# 시퀀스 내 아이템을 얼마나 가리고 예측할지 결정. 랜덤 샘플링 테스트와 직결되는 설정.
+mask_ratio: 0.2       
+
+loss_type: CE         # Cross Entropy Loss
+
+# 4. 학습 및 평가 설정 (Training & Eval Settings)
+epochs: 100
+train_batch_size: 2048
+eval_batch_size: 1024
+learning_rate: 0.001
+learner: adam
+train_neg_sample_args: ~     # BERT4Rec은 별도의 Negative Sampling 없이 전체 vocab에 대해 계산하므로 None(~)
+
+# 평가 지표
+metrics: ['Recall', 'NDCG']
+topk: [10]            # Recall@10 확인용
+valid_metric: Recall@10
+early_stopping_step: 10 # 10 epoch 동안 성능 향상 없으면 중단
+eval_neg_sample_args: ~
